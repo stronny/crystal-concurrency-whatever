@@ -1,0 +1,2 @@
+#!/bin/sh
+crystal build --debug --error-trace --warnings all --error-on-warnings tcp-latency.cr

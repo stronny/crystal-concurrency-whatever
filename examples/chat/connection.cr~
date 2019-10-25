@@ -1,0 +1,56 @@
+class Connection < XNT::Job::SocketReader
+
+	@timeout_jid : XNT::Jiber::ID
+	@ticker_jid : XNT::Jiber::ID
+	@string_buf : String::Builder = String::Builder.new
+
+	def initialize(@socket : Socket)
+		super
+		@timeout_jid = critical @jiber.start_child { XNT::Wiber.new { XNT::Job::Timeout.new } }
+		@ticker_jid = @jiber.start_child { XNT::Wiber.new { Ticker.new 1.seconds } }
+	end
+
+
+#	protected def create_read_buffer : Bytes
+#		Bytes.new 2
+#	end
+
+	protected def write(bytes : Bytes) : Nil
+		@socket.write bytes
+		@socket.write_byte 10_u8
+	end
+
+	def handle_finished_custom(status : XNT::Jiber::Status::Finished) : Nil
+		if status.jid == @timeout_jid && status.error.is_a? XNT::Job::Timeout::Expired
+p timeout: self
+		end
+	end
+
+	protected def process(count : Int32) : Nil
+		XNT::Jibers.interrupt_if_running @timeout_jid, XNT::Job::Timeout::Event::Rewind.new
+		buf = @read_buf[0,count]
+		while n = buf.index 10_u8
+			@string_buf.write buf[0, n]
+			process_line @string_buf.to_s.chomp
+			buf += (n + 1)
+			@string_buf = String::Builder.new
+		end
+		@string_buf.write buf if buf.size > 0
+	end
+
+	protected def process_line(line : String) : Nil
+		Connections.publish @jiber.id, line
+	end
+
+	protected def setup : Nil
+		Connections.register @jiber.id
+		XNT::Jibers.wake_me_up_after_first_of_these_children_start({@timeout_jid})
+		XNT::Jibers.interrupt_if_running @timeout_jid, XNT::Job::Timeout::Event::Set.new 10.seconds
+	end
+
+	protected def cleanup : Nil
+		super
+		Connections.leave @jiber.id
+	end
+
+end
