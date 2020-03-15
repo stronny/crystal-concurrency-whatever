@@ -10,7 +10,7 @@ p :hi
 count = ARGV.first.to_i
 server = TCPServer.new "localhost", 3001
 jiber = XNT::Wiber.new do
-	Server.new count, server
+  Server.new count, server
 end
 Crystal::Scheduler.enqueue jiber
 
